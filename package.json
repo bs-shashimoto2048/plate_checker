@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "出荷前銘板照合システム PoC Webアプリ",
+  "description": "出荷前銘板照合システム（動作部分の試験バージョン v0.1.0）",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
