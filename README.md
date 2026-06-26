@@ -371,47 +371,58 @@ OCRに渡す切り出し画像は、**検出枠内の座標・アスペクト比
 ## OCR 設定の変更方法
 
 `lang` / `psm` の初期値は **`src/services/ocrService.ts` の定数 `DEFAULT_OCR_OPTIONS`** で定義します。
-**ホワイトリスト（認識を許可する文字）は、プロジェクトルートの `whitelist.json` が唯一の編集元**です
+**ホワイトリスト（認識を許可する文字）は、プロジェクトルートの `whitelist.jsonc` が唯一の編集元**です
 （後述）。いずれも**画面UIからは編集しません**。
 
 | 設定 | 内容 | 初期値 / 編集元 |
 | --- | --- | --- |
 | `lang` | 認識言語（Tesseract 言語データ名） | `jpn+eng`（`ocrService.ts`） |
 | `psm` | Page Segmentation Mode。`6`=均一なブロック / `7`=単一行 | `6`（`ocrService.ts`） |
-| `whitelist` | 認識を許可する文字（`tessedit_char_whitelist`）。空文字で無制限 | **`whitelist.json`（ルート）** |
+| `whitelist` | 認識を許可する文字（`tessedit_char_whitelist`）。空文字で無制限 | **`whitelist.jsonc`（ルート）** |
 
-### ホワイトリストの編集元：`whitelist.json`（プロジェクトルート）
+### ホワイトリストの編集元：`whitelist.jsonc`（プロジェクトルート）
 
-ホワイトリストは**プロジェクトルートの `whitelist.json`** に外部化しています。**ビルド時に import** して読み込み、
-`ocrService.ts` の `DEFAULT_OCR_OPTIONS.whitelist` に供給します（実行時 fetch ではありません）。
+ホワイトリストは**プロジェクトルートの `whitelist.jsonc`**（コメント付きJSONC）に外部化しています。
+`src/logic/whitelist.ts` が**ビルド時に `?raw` で取り込み**（実行時 fetch ではない）、コメントを除去して
+パースし、`ocrService.ts` の `DEFAULT_OCR_OPTIONS.whitelist` に供給します。
 
-- **構造**：編集しやすいよう、カテゴリ別の文字列を `parts` 配列に分けて持ちます。**`parts` を順に連結した
-  1つの文字列**が最終的なホワイトリスト（`tessedit_char_whitelist`）になります。
+- **構造**：`groups` オブジェクトに**文字種ごと**（`base` / `hiragana` / `katakana` / `kanji` / `symbols`）の
+  文字列を持ち、**各グループに `//` コメント**を付けて整理しています。**全グループを順に連結し、重複文字を
+  1つにまとめた**1つの文字列が最終的なホワイトリスト（`tessedit_char_whitelist`）になります。
 
-  ```json
+  ```jsonc
   {
-    "_comment": "…（編集方法の説明）…",
-    "parts": [
-      "電灯高圧低受停復電制御用検出確認盤配分岐電源点棟コンセント次動力トランスリレータイマ",
-      "・ ",
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-      "abcdefghijklmnopqrstuvwxyz",
-      "0123456789",
-      ".-_/()"
-    ]
+    "groups": {
+      // 基本セット（銘板主要語＋英数記号）
+      "base": "電灯高圧…ABC…0123456789.-_/()",
+      // ひらがな（業界実績ベースで追加）
+      "hiragana": "あいう…",
+      // カタカナ（・ ー ﾝ を含む）
+      "katakana": "ァアィ…",
+      // 漢字（業界実績ベースで追加）
+      "kanji": "一三上…",
+      // 記号・その他（半角/全角スペース含む）
+      "symbols": "%&'*+,@\\ ×℃№…"
+    }
   }
   ```
 
-- **編集方法**：許可文字を増減したい場合は該当する `parts` の文字列を編集（または要素を追加）します。
-  連結順がそのまま並びになります。**空（`parts` が空）にすると無制限**になります。
-- **反映**：ビルド時 import のため、変更後は **再ビルド（`npm run build`）または開発サーバーのホットリロード**で
+- **編集方法**：許可文字を増減したい場合は該当グループの文字列を編集（またはグループを追加）します。
+  **同じ文字が複数グループに入っても、読み込み時に重複は自動で1つにまとめられます**（出現順は保持）。
+  **空（全グループが空）にすると無制限**になります。
+- **反映**：ビルド時取り込みのため、変更後は **再ビルド（`npm run build`）または開発サーバーのホットリロード**で
   反映されます。**画面UIからは編集しません**（ファイルのみ）。
-- 設定面では `tsconfig.app.json` の `resolveJsonModule: true` と `include` に `whitelist.json` を追加して
-  ルート直下のJSONを import 解決しています（Vite はJSON import を標準サポート）。
+- **バックアップ**：文字追加前の現行ホワイトリストを **`whitelist.backup.jsonc`**（ルート・参照用）に保存しています。
+  アプリが読み込むのは `whitelist.jsonc` のみです。
+- 取り込みは `import raw from '../../whitelist.jsonc?raw'`（Vite の `?raw`）＋自前のコメント除去パーサ
+  （`src/logic/whitelist.ts`）で行います。JSON 専用設定（`resolveJsonModule`）は不要です。
+
+> **運用メモ**：今回ひらがな・カタカナ・漢字・記号を業界実績ベースで大量に追加しました。許可文字が増える分、
+> 「絞り込み（不要文字の排除）」効果は弱まりますが、**未登録文字による取りこぼし（読めない）を減らす**狙いです。
 
 ### ホワイトリストの適用経路（重要）
 
-`whitelist.json` 由来の `DEFAULT_OCR_OPTIONS.whitelist` は次のように**映像検査・手動検査の両経路**で OCR に渡ります。
+`whitelist.jsonc` 由来の `DEFAULT_OCR_OPTIONS.whitelist` は次のように**映像検査・手動検査の両経路**で OCR に渡ります。
 
 - 手動検査：`App` の `ocrOptions`（= `DEFAULT_OCR_OPTIONS`）→ `ManualInspection` →
   `ocrService.recognize(image, ocrOptions)`。
@@ -424,7 +435,7 @@ OCRに渡す切り出し画像は、**検出枠内の座標・アスペクト比
 （言語データはワーカー生成時にロードされるため）。`lang` が変わったときだけワーカーを再生成します。
 
 > ホワイトリストにある文字（例 `棟`）は読み取られ、外した文字は出力されません。動作確認時は
-> **`whitelist.json` の `parts`** から特定文字を抜く／加えて再ビルド（またはホットリロード）すると、
+> **`whitelist.jsonc` の該当グループ**から特定文字を抜く／加えて再ビルド（またはホットリロード）すると、
 > フィルタが効いていることを両経路で確認できます。
 
 ### 日本語認識と言語学習データ（jpn+eng）
@@ -567,7 +578,8 @@ iPhone から PC の開発サーバーへ LAN 経由で `http://` アクセス�
 ## プロジェクト構成と主要ロジック
 
 ```
-whitelist.json            OCRホワイトリストの編集元（ルート・ビルド時import）
+whitelist.jsonc           OCRホワイトリストの編集元（ルート・文字種グループ＋コメント・ビルド時取り込み）
+whitelist.backup.jsonc    ホワイトリストのバックアップ（参照用・文字追加前のスナップショット）
 public/
   sample-answers.json       サンプル回答データ（製番→複数銘板(No)→行+枚数）
 src/
@@ -584,6 +596,7 @@ src/
     normalize.ts            正規化処理（全角→半角・空白除去・記号除去・置換辞書）
     vision.ts               行分割（安定グレースケール・水平投影/固定分割）
     preprocessPipeline.ts   OCR前処理パイプライン（設定値で実適用・OpenCV/JSフォールバック）
+    whitelist.ts            whitelist.jsonc を取り込み・コメント除去・連結・重複除去
     match.ts                照合処理（レーベンシュタイン距離・段階判定・行ごと照合）
     resultOutput.ts         結果出力処理（手動1銘板/製番単位の検査結果JSON生成・DL）
     preprocessSettings.ts   前処理設定のデフォルト値（PreprocessSettings・次段階の適用用に保持）

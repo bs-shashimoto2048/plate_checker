@@ -8,8 +8,8 @@
 // 生成・破棄せず「永続ワーカーを使い回す」実装にしている（lang 変更時のみ再生成）。
 
 import Tesseract from 'tesseract.js'
-// ホワイトリストの唯一の編集元（プロジェクトルートの設定ファイル）をビルド時importで読み込む
-import whitelistConfig from '../../whitelist.json'
+// ホワイトリストの唯一の編集元（ルートの whitelist.jsonc）をビルド時importで読み込む
+import { OCR_WHITELIST } from '../logic/whitelist'
 
 /** OCRに渡せる画像の型 */
 export type OcrImage = File | Blob | string | HTMLCanvasElement | ImageData
@@ -58,23 +58,14 @@ export interface OcrService {
 }
 
 /**
- * OCRのホワイトリスト（認識を許可する文字）。
- * 唯一の編集元はプロジェクトルートの `whitelist.json`。ビルド時importで読み込み、
- * `parts` を連結して1つの文字列にする（画面UIからは編集しない）。
- * 変更後は再ビルド／開発サーバーのホットリロードで反映される。
- */
-const WHITELIST: string = Array.isArray(whitelistConfig.parts)
-  ? whitelistConfig.parts.join('')
-  : ''
-
-/**
- * OCRオプションの初期値。ホワイトリストは `whitelist.json` 由来（上記 WHITELIST）。
+ * OCRオプションの初期値。ホワイトリストは `whitelist.jsonc`（ルート）由来で、
+ * `src/logic/whitelist.ts` がグループ連結＋重複除去した文字列（OCR_WHITELIST）を供給する。
  * lang / psm はここで定義する。
  */
 export const DEFAULT_OCR_OPTIONS: OcrOptions = {
   lang: 'jpn+eng',
   psm: 6,
-  whitelist: WHITELIST,
+  whitelist: OCR_WHITELIST,
 }
 
 /**
