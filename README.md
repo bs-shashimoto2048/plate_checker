@@ -368,21 +368,50 @@ OCRに渡す切り出し画像は、**検出枠内の座標・アスペクト比
 
 ---
 
-## OCR 設定の変更方法（ホワイトリストはソースのみ）
+## OCR 設定の変更方法
 
-OCR の初期値は **`src/services/ocrService.ts` の定数 `DEFAULT_OCR_OPTIONS`** で定義しています
-（手動・映像検査で共通の唯一の参照元）。**ホワイトリストを含む OCR 設定の編集UIは廃止**したため、
-変更はこの定数（`DEFAULT_OCR_OPTIONS.whitelist` 等）を直接編集してください。
+`lang` / `psm` の初期値は **`src/services/ocrService.ts` の定数 `DEFAULT_OCR_OPTIONS`** で定義します。
+**ホワイトリスト（認識を許可する文字）は、プロジェクトルートの `whitelist.json` が唯一の編集元**です
+（後述）。いずれも**画面UIからは編集しません**。
 
-| 設定 | 内容 | 初期値 |
+| 設定 | 内容 | 初期値 / 編集元 |
 | --- | --- | --- |
-| `lang` | 認識言語（Tesseract 言語データ名） | `jpn+eng` |
-| `psm` | Page Segmentation Mode。`6`=均一なブロック / `7`=単一行 | `6` |
-| `whitelist` | 認識を許可する文字（`tessedit_char_whitelist`）。空文字で無制限 | `DEFAULT_OCR_OPTIONS.whitelist` 参照 |
+| `lang` | 認識言語（Tesseract 言語データ名） | `jpn+eng`（`ocrService.ts`） |
+| `psm` | Page Segmentation Mode。`6`=均一なブロック / `7`=単一行 | `6`（`ocrService.ts`） |
+| `whitelist` | 認識を許可する文字（`tessedit_char_whitelist`）。空文字で無制限 | **`whitelist.json`（ルート）** |
+
+### ホワイトリストの編集元：`whitelist.json`（プロジェクトルート）
+
+ホワイトリストは**プロジェクトルートの `whitelist.json`** に外部化しています。**ビルド時に import** して読み込み、
+`ocrService.ts` の `DEFAULT_OCR_OPTIONS.whitelist` に供給します（実行時 fetch ではありません）。
+
+- **構造**：編集しやすいよう、カテゴリ別の文字列を `parts` 配列に分けて持ちます。**`parts` を順に連結した
+  1つの文字列**が最終的なホワイトリスト（`tessedit_char_whitelist`）になります。
+
+  ```json
+  {
+    "_comment": "…（編集方法の説明）…",
+    "parts": [
+      "電灯高圧低受停復電制御用検出確認盤配分岐電源点棟コンセント次動力トランスリレータイマ",
+      "・ ",
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "abcdefghijklmnopqrstuvwxyz",
+      "0123456789",
+      ".-_/()"
+    ]
+  }
+  ```
+
+- **編集方法**：許可文字を増減したい場合は該当する `parts` の文字列を編集（または要素を追加）します。
+  連結順がそのまま並びになります。**空（`parts` が空）にすると無制限**になります。
+- **反映**：ビルド時 import のため、変更後は **再ビルド（`npm run build`）または開発サーバーのホットリロード**で
+  反映されます。**画面UIからは編集しません**（ファイルのみ）。
+- 設定面では `tsconfig.app.json` の `resolveJsonModule: true` と `include` に `whitelist.json` を追加して
+  ルート直下のJSONを import 解決しています（Vite はJSON import を標準サポート）。
 
 ### ホワイトリストの適用経路（重要）
 
-`DEFAULT_OCR_OPTIONS.whitelist` は次のように**映像検査・手動検査の両経路**で OCR に渡ります。
+`whitelist.json` 由来の `DEFAULT_OCR_OPTIONS.whitelist` は次のように**映像検査・手動検査の両経路**で OCR に渡ります。
 
 - 手動検査：`App` の `ocrOptions`（= `DEFAULT_OCR_OPTIONS`）→ `ManualInspection` →
   `ocrService.recognize(image, ocrOptions)`。
@@ -395,8 +424,8 @@ OCR の初期値は **`src/services/ocrService.ts` の定数 `DEFAULT_OCR_OPTION
 （言語データはワーカー生成時にロードされるため）。`lang` が変わったときだけワーカーを再生成します。
 
 > ホワイトリストにある文字（例 `棟`）は読み取られ、外した文字は出力されません。動作確認時は
-> `DEFAULT_OCR_OPTIONS.whitelist` から特定文字を抜く／加えると、フィルタが効いていることを
-> 両経路で確認できます。
+> **`whitelist.json` の `parts`** から特定文字を抜く／加えて再ビルド（またはホットリロード）すると、
+> フィルタが効いていることを両経路で確認できます。
 
 ### 日本語認識と言語学習データ（jpn+eng）
 
@@ -538,6 +567,7 @@ iPhone から PC の開発サーバーへ LAN 経由で `http://` アクセス�
 ## プロジェクト構成と主要ロジック
 
 ```
+whitelist.json            OCRホワイトリストの編集元（ルート・ビルド時import）
 public/
   sample-answers.json       サンプル回答データ（製番→複数銘板(No)→行+枚数）
 src/

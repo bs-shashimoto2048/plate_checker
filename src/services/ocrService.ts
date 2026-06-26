@@ -8,6 +8,8 @@
 // 生成・破棄せず「永続ワーカーを使い回す」実装にしている（lang 変更時のみ再生成）。
 
 import Tesseract from 'tesseract.js'
+// ホワイトリストの唯一の編集元（プロジェクトルートの設定ファイル）をビルド時importで読み込む
+import whitelistConfig from '../../whitelist.json'
 
 /** OCRに渡せる画像の型 */
 export type OcrImage = File | Blob | string | HTMLCanvasElement | ImageData
@@ -56,14 +58,23 @@ export interface OcrService {
 }
 
 /**
- * OCRオプションの初期値（＝ホワイトリスト等の唯一の参照元）。
- * ホワイトリストは画面UIからは編集せず、この定数を編集する。
+ * OCRのホワイトリスト（認識を許可する文字）。
+ * 唯一の編集元はプロジェクトルートの `whitelist.json`。ビルド時importで読み込み、
+ * `parts` を連結して1つの文字列にする（画面UIからは編集しない）。
+ * 変更後は再ビルド／開発サーバーのホットリロードで反映される。
+ */
+const WHITELIST: string = Array.isArray(whitelistConfig.parts)
+  ? whitelistConfig.parts.join('')
+  : ''
+
+/**
+ * OCRオプションの初期値。ホワイトリストは `whitelist.json` 由来（上記 WHITELIST）。
+ * lang / psm はここで定義する。
  */
 export const DEFAULT_OCR_OPTIONS: OcrOptions = {
   lang: 'jpn+eng',
   psm: 6,
-  whitelist:
-    '電灯高圧低受停復電制御用検出確認盤配分岐電源点棟コンセント次動力トランスリレータイマ・ ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_/()',
+  whitelist: WHITELIST,
 }
 
 /**
