@@ -583,28 +583,32 @@
   border: 2px solid #eab308;
 }
 
-/* ===== 設定メニュー（オーバーレイ・モーダル） ===== */
+/* ===== 設定メニュー（オーバーレイ・下寄せボトムシート） =====
+   映像枠（画面上部）を覆わない・dim しないため、下寄せ＋背景透明にし、
+   映像と設定メニューが同時に見える。パネルは高さ制限＋内部スクロール。 */
 .settings-overlay {
   position: fixed;
   inset: 0;
   z-index: 50;
   display: flex;
-  align-items: center;
+  align-items: flex-end; /* 下寄せ＝上部の映像枠に被らない */
   justify-content: center;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.45);
+  padding: 0.6rem;
+  padding-bottom: calc(0.6rem + env(safe-area-inset-bottom));
+  background: transparent; /* 映像を暗くしない＝同時に見える */
 }
 
 .settings-panel {
   width: 100%;
-  max-width: 360px;
-  max-height: 85vh; /* オーバーレイ内で完結。本体レイアウトを押し広げない */
+  max-width: 380px;
+  /* 上部の映像枠に被らない高さに制限。項目が多くてもこの中をスクロール */
+  max-height: 58vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: #fff;
-  border-radius: 10px;
-  padding: 0.8rem 1rem 1rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 0 1rem 1rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); /* 浮いて見えるよう影を強める */
 }
 
 .settings-sep {
@@ -613,11 +617,17 @@
   margin: 0.8rem 0;
 }
 
+/* パネル見出し（設定／×）。上部固定でスクロールしても×に届く */
 .settings-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-weight: 800;
+  background: #fff;
+  padding-top: 0.8rem;
   margin-bottom: 0.6rem;
 }
 

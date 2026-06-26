@@ -17,15 +17,31 @@ interface Props {
   onReset: () => void
 }
 
-const THRESHOLD_TYPES: ThresholdType[] = [
-  'binary',
-  'binary_inv',
-  'otsu',
-  'adaptive',
-  'none',
+/** セレクト選択肢（内部値は英語キーのまま、表示のみ日本語） */
+interface Option<T extends string> {
+  value: T
+  label: string
+}
+
+const THRESHOLD_TYPES: Option<ThresholdType>[] = [
+  { value: 'binary', label: '二値' },
+  { value: 'binary_inv', label: '二値（反転）' },
+  { value: 'otsu', label: '大津' },
+  { value: 'adaptive', label: '適応' },
+  { value: 'none', label: 'なし' },
 ]
-const MORPH_METHODS: MorphMethod[] = ['close', 'open', 'dilate', 'erode']
-const DENOISE_METHODS: DenoiseMethod[] = ['gaussian', 'median', 'bilateral', 'none']
+const MORPH_METHODS: Option<MorphMethod>[] = [
+  { value: 'close', label: 'クローズ' },
+  { value: 'open', label: 'オープン' },
+  { value: 'dilate', label: '膨張' },
+  { value: 'erode', label: '収縮' },
+]
+const DENOISE_METHODS: Option<DenoiseMethod>[] = [
+  { value: 'gaussian', label: 'ガウシアン' },
+  { value: 'median', label: 'メディアン' },
+  { value: 'bilateral', label: 'バイラテラル' },
+  { value: 'none', label: 'なし' },
+]
 
 // ---- 小さな再利用コントロール ----
 
@@ -56,7 +72,7 @@ function NumberField(props: {
 function SelectField<T extends string>(props: {
   label: string
   value: T
-  options: readonly T[]
+  options: readonly Option<T>[]
   onChange: (v: T) => void
 }) {
   return (
@@ -68,8 +84,8 @@ function SelectField<T extends string>(props: {
         onChange={(e) => props.onChange(e.target.value as T)}
       >
         {props.options.map((o) => (
-          <option key={o} value={o}>
-            {o}
+          <option key={o.value} value={o.value}>
+            {o.label}
           </option>
         ))}
       </select>
@@ -127,7 +143,7 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* ルート */}
       <NumberField
-        label="ratio_threshold"
+        label="縦横比しきい値"
         value={value.ratio_threshold}
         step={0.1}
         onChange={(v) => onChange({ ...value, ratio_threshold: v })}
@@ -135,15 +151,15 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* threshold */}
       <fieldset className="pp-op">
-        <legend>threshold</legend>
+        <legend>二値化</legend>
         <SelectField
-          label="type"
+          label="種別"
           value={ops.threshold.type}
           options={THRESHOLD_TYPES}
           onChange={(v) => setOp('threshold', 'type', v)}
         />
         <NumberField
-          label="value"
+          label="しきい値"
           value={ops.threshold.value}
           onChange={(v) => setOp('threshold', 'value', v)}
         />
@@ -151,15 +167,15 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* clahe */}
       <fieldset className="pp-op">
-        <legend>clahe</legend>
+        <legend>CLAHE（適応平坦化）</legend>
         <NumberField
-          label="clip_limit"
+          label="クリップ制限"
           value={ops.clahe.clip_limit}
           step={0.1}
           onChange={(v) => setOp('clahe', 'clip_limit', v)}
         />
         <NumberField
-          label="tile_grid_size"
+          label="タイル分割数"
           value={ops.clahe.tile_grid_size}
           onChange={(v) => setOp('clahe', 'tile_grid_size', v)}
         />
@@ -167,20 +183,20 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* sharpen */}
       <fieldset className="pp-op">
-        <legend>sharpen</legend>
+        <legend>シャープ</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.sharpen.enabled}
           onChange={(v) => setOp('sharpen', 'enabled', v)}
         />
         <NumberField
-          label="amount"
+          label="強度"
           value={ops.sharpen.amount}
           step={0.1}
           onChange={(v) => setOp('sharpen', 'amount', v)}
         />
         <NumberField
-          label="sigma"
+          label="シグマ"
           value={ops.sharpen.sigma}
           step={0.1}
           onChange={(v) => setOp('sharpen', 'sigma', v)}
@@ -189,14 +205,14 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* gamma */}
       <fieldset className="pp-op">
-        <legend>gamma</legend>
+        <legend>ガンマ</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.gamma.enabled}
           onChange={(v) => setOp('gamma', 'enabled', v)}
         />
         <NumberField
-          label="value"
+          label="値"
           value={ops.gamma.value}
           step={0.1}
           onChange={(v) => setOp('gamma', 'value', v)}
@@ -205,25 +221,25 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* morph */}
       <fieldset className="pp-op">
-        <legend>morph</legend>
+        <legend>モルフォロジー</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.morph.enabled}
           onChange={(v) => setOp('morph', 'enabled', v)}
         />
         <SelectField
-          label="method"
+          label="方法"
           value={ops.morph.method}
           options={MORPH_METHODS}
           onChange={(v) => setOp('morph', 'method', v)}
         />
         <NumberField
-          label="ksize"
+          label="カーネル径"
           value={ops.morph.ksize}
           onChange={(v) => setOp('morph', 'ksize', v)}
         />
         <NumberField
-          label="iterations"
+          label="反復回数"
           value={ops.morph.iterations}
           onChange={(v) => setOp('morph', 'iterations', v)}
         />
@@ -231,26 +247,26 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* unsharp */}
       <fieldset className="pp-op">
-        <legend>unsharp</legend>
+        <legend>アンシャープ</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.unsharp.enabled}
           onChange={(v) => setOp('unsharp', 'enabled', v)}
         />
         <NumberField
-          label="amount"
+          label="強度"
           value={ops.unsharp.amount}
           step={0.1}
           onChange={(v) => setOp('unsharp', 'amount', v)}
         />
         <NumberField
-          label="radius"
+          label="半径"
           value={ops.unsharp.radius}
           step={0.1}
           onChange={(v) => setOp('unsharp', 'radius', v)}
         />
         <NumberField
-          label="threshold"
+          label="しきい値"
           value={ops.unsharp.threshold}
           onChange={(v) => setOp('unsharp', 'threshold', v)}
         />
@@ -258,24 +274,24 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* bilateral */}
       <fieldset className="pp-op">
-        <legend>bilateral</legend>
+        <legend>バイラテラル</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.bilateral.enabled}
           onChange={(v) => setOp('bilateral', 'enabled', v)}
         />
         <NumberField
-          label="diameter"
+          label="直径"
           value={ops.bilateral.diameter}
           onChange={(v) => setOp('bilateral', 'diameter', v)}
         />
         <NumberField
-          label="sigma_color"
+          label="色シグマ"
           value={ops.bilateral.sigma_color}
           onChange={(v) => setOp('bilateral', 'sigma_color', v)}
         />
         <NumberField
-          label="sigma_space"
+          label="空間シグマ"
           value={ops.bilateral.sigma_space}
           onChange={(v) => setOp('bilateral', 'sigma_space', v)}
         />
@@ -283,20 +299,20 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* local_contrast */}
       <fieldset className="pp-op">
-        <legend>local_contrast</legend>
+        <legend>局所コントラスト</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.local_contrast.enabled}
           onChange={(v) => setOp('local_contrast', 'enabled', v)}
         />
         <NumberField
-          label="clip_limit"
+          label="クリップ制限"
           value={ops.local_contrast.clip_limit}
           step={0.1}
           onChange={(v) => setOp('local_contrast', 'clip_limit', v)}
         />
         <NumberField
-          label="tile_grid_size"
+          label="タイル分割数"
           value={ops.local_contrast.tile_grid_size}
           onChange={(v) => setOp('local_contrast', 'tile_grid_size', v)}
         />
@@ -304,19 +320,19 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* crop_margin */}
       <fieldset className="pp-op">
-        <legend>crop_margin</legend>
+        <legend>余白クロップ</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.crop_margin.enabled}
           onChange={(v) => setOp('crop_margin', 'enabled', v)}
         />
         <NumberField
-          label="threshold"
+          label="しきい値"
           value={ops.crop_margin.threshold}
           onChange={(v) => setOp('crop_margin', 'threshold', v)}
         />
         <NumberField
-          label="margin"
+          label="余白"
           value={ops.crop_margin.margin}
           onChange={(v) => setOp('crop_margin', 'margin', v)}
         />
@@ -324,9 +340,9 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* hist_equalize */}
       <fieldset className="pp-op">
-        <legend>hist_equalize</legend>
+        <legend>ヒストグラム平坦化</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.hist_equalize.enabled}
           onChange={(v) => setOp('hist_equalize', 'enabled', v)}
         />
@@ -334,25 +350,25 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* stroke_boost */}
       <fieldset className="pp-op">
-        <legend>stroke_boost</legend>
+        <legend>線強調</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.stroke_boost.enabled}
           onChange={(v) => setOp('stroke_boost', 'enabled', v)}
         />
         <SelectField
-          label="method"
+          label="方法"
           value={ops.stroke_boost.method}
           options={MORPH_METHODS}
           onChange={(v) => setOp('stroke_boost', 'method', v)}
         />
         <NumberField
-          label="ksize"
+          label="カーネル径"
           value={ops.stroke_boost.ksize}
           onChange={(v) => setOp('stroke_boost', 'ksize', v)}
         />
         <NumberField
-          label="iterations"
+          label="反復回数"
           value={ops.stroke_boost.iterations}
           onChange={(v) => setOp('stroke_boost', 'iterations', v)}
         />
@@ -360,15 +376,15 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* denoise */}
       <fieldset className="pp-op">
-        <legend>denoise</legend>
+        <legend>ノイズ除去</legend>
         <SelectField
-          label="method"
+          label="方法"
           value={ops.denoise.method}
           options={DENOISE_METHODS}
           onChange={(v) => setOp('denoise', 'method', v)}
         />
         <NumberField
-          label="ksize"
+          label="カーネル径"
           value={ops.denoise.ksize}
           onChange={(v) => setOp('denoise', 'ksize', v)}
         />
@@ -376,9 +392,9 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* deskew */}
       <fieldset className="pp-op">
-        <legend>deskew</legend>
+        <legend>傾き補正</legend>
         <ToggleField
-          label="enabled"
+          label="有効"
           checked={ops.deskew.enabled}
           onChange={(v) => setOp('deskew', 'enabled', v)}
         />
@@ -386,19 +402,19 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
 
       {/* resize */}
       <fieldset className="pp-op">
-        <legend>resize</legend>
+        <legend>リサイズ</legend>
         <NumberField
-          label="single"
+          label="単一行高さ"
           value={ops.resize.single}
           onChange={(v) => setOp('resize', 'single', v)}
         />
         <NumberField
-          label="wide_height"
+          label="横長時高さ"
           value={ops.resize.wide_height}
           onChange={(v) => setOp('resize', 'wide_height', v)}
         />
         <ToggleField
-          label="keep_ratio"
+          label="縦横比保持"
           checked={ops.resize.keep_ratio}
           onChange={(v) => setOp('resize', 'keep_ratio', v)}
         />
