@@ -1,0 +1,738 @@
+/* PlateChecker 画面（映像検査メイン・iPhone 1画面・揺れない固定レイアウト） */
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  /* iOS Safari のセーフエリアを考慮 */
+  padding: calc(0.35rem + env(safe-area-inset-top)) 0.6rem
+    calc(0.6rem + env(safe-area-inset-bottom)) 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* ボタン共通: タップしやすい最小サイズ */
+.btn-primary,
+.btn-secondary,
+.btn-toggle,
+.btn-num {
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 0.45rem 0.9rem;
+}
+
+/* ヘッダー内などのコンパクトボタン */
+.btn-primary.sm,
+.btn-secondary.sm {
+  min-height: 38px;
+  padding: 0.3rem 0.7rem;
+}
+
+.btn-primary {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+}
+.btn-secondary {
+  background: #fff;
+  color: #2563eb;
+  border: 1px solid #2563eb;
+}
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.muted {
+  color: #6b7280;
+  font-size: 0.82rem;
+}
+.error {
+  color: #b91c1c;
+  font-size: 0.82rem;
+}
+
+/* ===== ヘッダー ===== */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.brand {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.head-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* ===== 映像枠（横長・aspect-ratio で高さ一定） ===== */
+.iv-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.iv-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 前処理後映像（表示用）。OCRの切り出し領域だけに前処理結果を描画する透明canvas。
+   バッキングストアは映像実ピクセルで、object-fit:cover により映像と同一に拡縮する
+   （＝範囲・アスペクト比が通常映像と一致）。領域外は透明で通常映像が透ける。
+   既定は非表示でJSが表示制御 */
+.iv-binary {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+  pointer-events: none;
+}
+
+/* 検出枠・行帯のオーバーレイ。映像と同じ object-fit:cover で重ねてズレを防ぐ */
+.iv-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.iv-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1rem;
+}
+
+/* 映像右上のOCR生テキスト＋類似度（固定高さ・揺れない） */
+.iv-readout {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 58%;
+  max-width: 320px;
+  height: 3.4rem; /* 生テキスト2行＋類似度1行ぶんで固定 */
+  box-sizing: border-box;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  color: #fff;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ro-ocr {
+  font-size: 0.72rem;
+  line-height: 1.15;
+  /* 最大2行・はみ出しは省略 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.ro-sim {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fde047;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 行頭ラベル（OCR: / 照合:）。控えめにして領域を広げない */
+.ro-label {
+  font-weight: 700;
+  color: #93c5fd;
+  opacity: 0.95;
+}
+
+/* ===== 最小ステータス（1行固定高さ） ===== */
+.status1 {
+  min-height: 1.2rem;
+  font-size: 0.78rem;
+  color: #6b7280;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.status1.is-error {
+  color: #b91c1c;
+}
+.status1.is-done {
+  color: #166534;
+  font-weight: 800;
+}
+
+/* ===== モード切替＋行数セレクト＋検査開始 の横並び1行（揺れない） ===== */
+.mode-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap; /* iPhone幅でも折り返さない */
+  gap: 0.4rem;
+  min-height: 48px; /* 行数セレクトの表示/非表示で揺れない */
+}
+
+.btn-toggle {
+  background: #111827;
+  color: #fff;
+  border: none;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  /* 「自動(切替)」「固定(切替)」で幅が変わらないよう余白を抑える */
+  padding: 0.45rem 0.6rem;
+}
+
+/* 行数セレクト領域。固定モード時のみ可視だが、自動モードでも幅を確保して揺らさない */
+.rows-ui {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.rows-select {
+  font: inherit;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #111827;
+}
+
+/* 検査開始/停止・リセット（行数セレクトの右隣に配置） */
+.run-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.run-actions .btn-primary.sm,
+.run-actions .btn-secondary.sm {
+  padding: 0.3rem 0.6rem;
+  white-space: nowrap;
+}
+
+/* 歯車など アイコンボタン */
+.btn-icon {
+  min-height: 38px;
+  min-width: 38px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.btn-icon:hover {
+  background: #f3f4f6;
+}
+
+/* ===== 検査ガイド（折りたたみ・映像枠直下） ===== */
+.guide-details,
+.more-details {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+  background: #fff;
+}
+
+.guide-details > summary,
+.more-details > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  list-style: revert;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 38px;
+  margin-top: 0.3rem;
+}
+
+.slider-label {
+  flex: 0 0 1.8rem;
+  font-size: 0.82rem;
+}
+
+.slider-row input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.slider-val {
+  flex: 0 0 2.8rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+}
+
+/* ===== 検査データ（製番→種類セット） ===== */
+.set-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.set-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.set-select {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 40px;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+/* ===== 検査内容テーブル（固定高さ＋スクロール） ===== */
+.table-fixed {
+  height: 30vh;
+  min-height: 140px;
+  max-height: 260px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.inspect-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.inspect-table th,
+.inspect-table td {
+  border: 1px solid #e5e7eb;
+  padding: 0.3rem 0.35rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.inspect-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f3f4f6;
+  z-index: 1;
+}
+
+.inspect-table .col-no {
+  width: 2rem;
+}
+.inspect-table .col-row {
+  width: 2.4rem;
+}
+.inspect-table .col-text {
+  text-align: left;
+  word-break: break-all;
+}
+.inspect-table .col-ocr {
+  width: 2.4rem;
+}
+.inspect-table .col-count {
+  width: 3rem;
+  font-weight: 700;
+}
+
+.inspect-table .row-current {
+  background: #eff6ff;
+}
+
+.ok-mark {
+  color: #16a34a;
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
+.empty-cell {
+  height: 4rem;
+}
+
+/* ===== その他（退避） ===== */
+.more-actions {
+  margin: 0.4rem 0;
+}
+
+.manual-inner {
+  margin-top: 0.4rem;
+}
+
+.manual-select {
+  display: block;
+  font-size: 0.82rem;
+  color: #374151;
+  margin: 0.4rem 0;
+}
+
+.manual-select select {
+  display: block;
+  min-height: 40px;
+  font: inherit;
+  margin-top: 0.2rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.4rem 0;
+}
+
+.camera-block {
+  margin: 0.4rem 0;
+}
+
+.camera-stage {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.camera-video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.camera-guide {
+  position: absolute;
+  top: 12%;
+  left: 8%;
+  right: 8%;
+  bottom: 12%;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.camera-guide-hint {
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+}
+
+.camera-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.preview {
+  margin-top: 0.5rem;
+}
+
+.preview img {
+  max-width: 100%;
+  max-height: 240px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.subhead {
+  font-size: 0.88rem;
+  margin: 0.6rem 0 0.3rem;
+  color: #374151;
+}
+
+.progress {
+  margin-top: 0.4rem;
+  font-size: 0.82rem;
+  color: #2563eb;
+}
+
+.ocr-text {
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.5rem;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.82rem;
+  min-height: 2.4rem;
+  margin: 0;
+}
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 0.5rem;
+}
+
+.table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.table-scroll th,
+.table-scroll td {
+  border: 1px solid #e5e7eb;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+}
+
+.table-scroll th {
+  background: #f9fafb;
+}
+
+.table-scroll td.score,
+.table-scroll th.score {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+.badge.PASS {
+  background: #dcfce7;
+  color: #166534;
+}
+.badge.NG {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.badge.REVIEW {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.overall {
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  padding: 0.6rem;
+  border-radius: 8px;
+  margin-top: 0.5rem;
+}
+.overall.PASS {
+  background: #dcfce7;
+  color: #166534;
+  border: 2px solid #22c55e;
+}
+.overall.NG {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 2px solid #ef4444;
+}
+.overall.REVIEW {
+  background: #fef9c3;
+  color: #854d0e;
+  border: 2px solid #eab308;
+}
+
+/* ===== 設定メニュー（オーバーレイ・モーダル） ===== */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.settings-panel {
+  width: 100%;
+  max-width: 360px;
+  max-height: 85vh; /* オーバーレイ内で完結。本体レイアウトを押し広げない */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.8rem 1rem 1rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.settings-sep {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 0.8rem 0;
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 800;
+  margin-bottom: 0.6rem;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  min-height: 40px;
+}
+
+.switch-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.switch-help {
+  margin: 0.5rem 0 0;
+}
+
+/* トグルスイッチ（Switch Control） */
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 26px;
+}
+.switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.switch-track {
+  width: 46px;
+  height: 26px;
+  border-radius: 13px;
+  background: #cbd5e1;
+  transition: background 0.15s;
+}
+.switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+.switch input:checked + .switch-track {
+  background: #2563eb;
+}
+.switch input:checked + .switch-track .switch-thumb {
+  transform: translateX(20px);
+}
+
+/* ===== 前処理設定フォーム（設定オーバーレイ内） ===== */
+.pp-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.pp-title {
+  font-weight: 800;
+}
+.pp-note {
+  margin: 0.3rem 0 0.6rem;
+}
+
+/* 各 operation のまとまり */
+.pp-op {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.3rem 0.6rem 0.5rem;
+  margin: 0 0 0.5rem;
+}
+.pp-op > legend {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #2563eb;
+  padding: 0 0.3rem;
+}
+
+/* 1項目（ラベル＋コントロールの横並び） */
+.pp-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 34px;
+}
+.pp-label {
+  font-size: 0.8rem;
+  color: #374151;
+}
+.pp-num,
+.pp-select {
+  flex: 0 0 auto;
+  width: 6.5rem;
+  font: inherit;
+  font-size: 0.82rem;
+  min-height: 32px;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+}
+.pp-toggle .switch {
+  margin-right: 0.1rem;
+}

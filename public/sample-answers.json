@@ -1,0 +1,40 @@
+{
+  "products": [
+    {
+      "serialNumber": "A1AA0000",
+      "types": [
+        {
+          "type": "小型銘板",
+          "nameplates": [
+              {"labelTexts": ["M1・M3棟 電灯"],"quantity": 2 },
+              {"labelTexts": ["M1・M3棟 電灯", "VCB(52F1)"], "quantity": 2 }
+          ]
+        },
+        {
+          "type": "汚泥ポンプ棟 制御盤",
+          "nameplates": [
+            { "labelTexts": ["No.1ポンプ", "No.2ポンプ"], "quantity": 1 }
+          ]
+        }
+      ]
+    },
+    {
+      "serialNumber": "A1AA1111",
+      "types": [
+        {
+          "type": "小型銘板",
+          "nameplates": [
+            { "labelTexts": ["高圧VT2次", "高圧配電盤No.5"], "quantity": 1 },
+            { "labelTexts": ["受電VCB制御電源", "PAS用SOG電源"], "quantity": 2 }
+          ]
+        },
+        {
+          "type": "中型銘板",
+          "nameplates": [
+            { "labelTexts": ["3棟 200V動力", "1F 照明分電盤", "非常用発電機制御"], "quantity": 1 }
+          ]
+        }
+      ]
+    }
+  ]
+}
