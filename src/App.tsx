@@ -202,30 +202,33 @@ function App() {
         </div>
       </div>
 
-      {/* 検査ガイド（折りたたみ。映像枠の直下なので開いても映像が見える） */}
+      {/* 検査ガイド（折りたたみ。映像枠の直下なので開いても映像が見える）
+          検出枠サイズはpx指定：5px刻み・最小100px・最大は映像枠の表示実寸に追従 */}
       <details className="guide-details">
         <summary>検査ガイド（検出枠サイズ）</summary>
         <label className="slider-row">
           <span className="slider-label">幅</span>
           <input
             type="range"
-            min={20}
-            max={95}
-            value={Math.round(video.guideW * 100)}
-            onChange={(e) => video.setGuideW(Number(e.target.value) / 100)}
+            min={video.guideMinPx}
+            max={video.guideMaxWpx}
+            step={video.guideStepPx}
+            value={video.guideWpx}
+            onChange={(e) => video.setGuideWpx(Number(e.target.value))}
           />
-          <span className="slider-val">{Math.round(video.guideW * 100)}%</span>
+          <span className="slider-val">{video.guideWpx}px</span>
         </label>
         <label className="slider-row">
           <span className="slider-label">高さ</span>
           <input
             type="range"
-            min={20}
-            max={95}
-            value={Math.round(video.guideH * 100)}
-            onChange={(e) => video.setGuideH(Number(e.target.value) / 100)}
+            min={video.guideMinPx}
+            max={video.guideMaxHpx}
+            step={video.guideStepPx}
+            value={video.guideHpx}
+            onChange={(e) => video.setGuideHpx(Number(e.target.value))}
           />
-          <span className="slider-val">{Math.round(video.guideH * 100)}%</span>
+          <span className="slider-val">{video.guideHpx}px</span>
         </label>
       </details>
 

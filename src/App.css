@@ -296,7 +296,7 @@
 }
 
 .slider-val {
-  flex: 0 0 2.8rem;
+  flex: 0 0 3.6rem; /* 「1080px」等でも揺れない固定幅 */
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-size: 0.82rem;

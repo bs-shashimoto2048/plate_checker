@@ -64,11 +64,17 @@ export interface UseVideoInspection {
   error: string | null
   /** OCR言語データ（jpn+eng）のロード失敗メッセージ。正常時は null */
   ocrError: string | null
-  /** ガイド枠の幅・高さ（フレームに対する割合 0.2〜0.95） */
-  guideW: number
-  guideH: number
-  setGuideW: (v: number) => void
-  setGuideH: (v: number) => void
+  /** 検出枠の幅・高さ（表示px。映像枠上で見えている実寸基準） */
+  guideWpx: number
+  guideHpx: number
+  setGuideWpx: (v: number) => void
+  setGuideHpx: (v: number) => void
+  /** 検出枠pxの最小値（=100）と最大値（=映像枠の表示実寸px・動的） */
+  guideMinPx: number
+  guideMaxWpx: number
+  guideMaxHpx: number
+  /** 検出枠pxの調整ステップ（=5） */
+  guideStepPx: number
   mode: LineMode
   toggleMode: () => void
   fixedRows: number
@@ -90,10 +96,17 @@ export interface UseVideoInspection {
   reset: () => void
 }
 
-const GUIDE_MIN = 0.2
-const GUIDE_MAX = 0.95
-const GUIDE_DEFAULT = { w: 0.8, h: 0.4 } // 横長寄り
-const clampGuide = (v: number) => Math.min(GUIDE_MAX, Math.max(GUIDE_MIN, v))
+// 検出枠は「表示px」で指定する（映像枠上で見えている実寸基準）。
+// 最小100px、ステップ5px、最大は映像枠の表示実寸（動的）に追従する。
+const GUIDE_MIN_PX = 100
+const GUIDE_STEP_PX = 5
+// 表示実寸が未測定のときの暫定上限（測定後に実寸へ置き換わる）
+const GUIDE_FALLBACK_MAX_PX = 4000
+/** px値を 5px 刻みに丸めて [min, max] にクランプ */
+const snapGuidePx = (v: number, max: number) => {
+  const snapped = Math.round(v / GUIDE_STEP_PX) * GUIDE_STEP_PX
+  return Math.max(GUIDE_MIN_PX, Math.min(Math.max(GUIDE_MIN_PX, max), snapped))
+}
 
 function clampRect(r: Rect, w: number, h: number): Rect {
   const x = Math.max(0, Math.min(w - 1, r.x))
@@ -141,7 +154,8 @@ export function useVideoInspection(
   const runningRef = useRef(false)
   const busyRef = useRef(false)
   const cvRef = useRef<unknown>(null)
-  const guideRef = useRef({ ...GUIDE_DEFAULT })
+  // 検出枠サイズ（表示px）。0 は未初期化（映像枠実寸の測定後に既定値を設定）
+  const guideRef = useRef({ wpx: 0, hpx: 0 })
   const modeRef = useRef<LineMode>('auto')
   const fixedRowsRef = useRef(2)
   const previewModeRef = useRef<PreviewMode>('normal')
@@ -161,8 +175,11 @@ export function useVideoInspection(
   const [cvError, setCvError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ocrError, setOcrError] = useState<string | null>(null)
-  const [guideW, setGuideWState] = useState(GUIDE_DEFAULT.w)
-  const [guideH, setGuideHState] = useState(GUIDE_DEFAULT.h)
+  const [guideWpx, setGuideWpxState] = useState(0)
+  const [guideHpx, setGuideHpxState] = useState(0)
+  // 映像枠の表示実寸（px）。検出枠pxの最大値に使う（リサイズ/回転で追従）
+  const [stageW, setStageW] = useState(0)
+  const [stageH, setStageH] = useState(0)
   const [mode, setModeState] = useState<LineMode>('auto')
   const [fixedRows, setFixedRowsState] = useState(2)
   const [detectedLineCount, setDetectedLineCount] = useState(0)
@@ -185,16 +202,53 @@ export function useVideoInspection(
     thresholdsRef.current = thresholds
   }, [thresholds])
 
-  const setGuideW = (v: number) => {
-    const c = clampGuide(v)
-    guideRef.current = { ...guideRef.current, w: c }
-    setGuideWState(c)
+  const setGuideWpx = (v: number) => {
+    const c = snapGuidePx(v, stageW || GUIDE_FALLBACK_MAX_PX)
+    guideRef.current = { ...guideRef.current, wpx: c }
+    setGuideWpxState(c)
   }
-  const setGuideH = (v: number) => {
-    const c = clampGuide(v)
-    guideRef.current = { ...guideRef.current, h: c }
-    setGuideHState(c)
+  const setGuideHpx = (v: number) => {
+    const c = snapGuidePx(v, stageH || GUIDE_FALLBACK_MAX_PX)
+    guideRef.current = { ...guideRef.current, hpx: c }
+    setGuideHpxState(c)
   }
+
+  // 映像枠（video要素）の表示実寸を監視し、検出枠pxの最大値に反映。
+  // 初回測定時は既定サイズ（横長寄り：幅80%・高さ45%）で初期化し、
+  // リサイズ/回転で枠が縮んだら現在値を新しい最大値へクランプする。
+  useEffect(() => {
+    const el = videoRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const apply = (cw: number, ch: number) => {
+      if (cw <= 0 || ch <= 0) return
+      setStageW(cw)
+      setStageH(ch)
+      const cur = guideRef.current
+      let wpx = cur.wpx
+      let hpx = cur.hpx
+      if (wpx === 0 || hpx === 0) {
+        // 未初期化：見やすい既定（幅80%・高さ45%）
+        wpx = cw * 0.8
+        hpx = ch * 0.45
+      }
+      wpx = snapGuidePx(wpx, cw)
+      hpx = snapGuidePx(hpx, ch)
+      if (wpx !== cur.wpx || hpx !== cur.hpx) {
+        guideRef.current = { wpx, hpx }
+      }
+      setGuideWpxState(wpx)
+      setGuideHpxState(hpx)
+    }
+    apply(el.clientWidth, el.clientHeight)
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect
+      if (r) apply(Math.round(r.width), Math.round(r.height))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const toggleMode = () => {
     const next: LineMode = modeRef.current === 'auto' ? 'fixed' : 'auto'
     modeRef.current = next
@@ -265,11 +319,24 @@ export function useVideoInspection(
     initProgress(target)
   }, [target, initProgress])
 
-  /** ガイド枠（フレーム内ピクセル）を計算する */
+  /**
+   * 検出枠（映像フレーム内ピクセル）を計算する。
+   * ユーザー指定は「表示px」（映像枠上で見えている実寸）なので、object-fit:cover の
+   * 拡大率（coverScale = max(cw/vw, ch/vh)）で割って映像フレームpxへ換算する。
+   * これにより「指定px＝映像枠上で見えている範囲」となり、OCR切り出し用の実映像
+   * 解像度との換算を内部で吸収する。中心固定で配置する。
+   */
   const computeGuideRect = useCallback((vw: number, vh: number): Rect => {
-    const { w, h } = guideRef.current
-    const width = vw * w
-    const height = vh * h
+    const el = videoRef.current
+    const cw = el?.clientWidth || vw
+    const ch = el?.clientHeight || vh
+    const coverScale = Math.max(cw / vw, ch / vh) || 1 // 表示px / 映像px
+    const { wpx, hpx } = guideRef.current
+    // 表示px → 映像フレームpx（未初期化時は枠の80%/45%相当でフォールバック）
+    const wReq = (wpx > 0 ? wpx : cw * 0.8) / coverScale
+    const hReq = (hpx > 0 ? hpx : ch * 0.45) / coverScale
+    const width = Math.min(vw, Math.max(1, wReq))
+    const height = Math.min(vh, Math.max(1, hReq))
     return { x: (vw - width) / 2, y: (vh - height) / 2, width, height }
   }, [])
 
@@ -701,10 +768,14 @@ export function useVideoInspection(
     cvError,
     error,
     ocrError,
-    guideW,
-    guideH,
-    setGuideW,
-    setGuideH,
+    guideWpx,
+    guideHpx,
+    setGuideWpx,
+    setGuideHpx,
+    guideMinPx: GUIDE_MIN_PX,
+    guideMaxWpx: stageW || GUIDE_FALLBACK_MAX_PX,
+    guideMaxHpx: stageH || GUIDE_FALLBACK_MAX_PX,
+    guideStepPx: GUIDE_STEP_PX,
     mode,
     toggleMode,
     fixedRows,
