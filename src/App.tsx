@@ -50,7 +50,8 @@ function App() {
   // 設定メニュー（オーバーレイ）の開閉
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  // 前処理設定（保持・表示・編集のみ。処理適用は次段階）
+  // 前処理設定（フォームの値で実際にOCR入力へ前処理を適用）。
+  // 設定メニューを閉じても state は保持される（セッション中は値が失われない）。
   const [preprocessSettings, setPreprocessSettings] = useState<PreprocessSettings>(
     () => freshPreprocessSettings(),
   )
@@ -60,8 +61,13 @@ function App() {
   const [typeIndex, setTypeIndex] = useState(0)
   const [activeTarget, setActiveTarget] = useState<InspectionTarget | null>(null)
 
-  // 映像リアルタイム検査
-  const video = useVideoInspection(activeTarget, ocrOptions, DEFAULT_THRESHOLDS)
+  // 映像リアルタイム検査（前処理設定はフォームの最新値を渡す＝リアルタイム反映）
+  const video = useVideoInspection(
+    activeTarget,
+    ocrOptions,
+    DEFAULT_THRESHOLDS,
+    preprocessSettings,
+  )
 
   useEffect(() => {
     setAnswerError(null)
@@ -210,7 +216,7 @@ function App() {
           <span className="slider-label">幅</span>
           <input
             type="range"
-            min={video.guideMinPx}
+            min={video.guideMinWpx}
             max={video.guideMaxWpx}
             step={video.guideStepPx}
             value={video.guideWpx}
@@ -222,7 +228,7 @@ function App() {
           <span className="slider-label">高さ</span>
           <input
             type="range"
-            min={video.guideMinPx}
+            min={video.guideMinHpx}
             max={video.guideMaxHpx}
             step={video.guideStepPx}
             value={video.guideHpx}

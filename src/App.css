@@ -746,3 +746,9 @@
 .pp-toggle .switch {
   margin-right: 0.1rem;
 }
+
+/* 最下段：デフォルトに戻すボタン（全幅） */
+.pp-reset {
+  width: 100%;
+  margin-top: 0.4rem;
+}

@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   InspectionTarget,
   LineMode,
+  PreprocessSettings,
   LineState,
   ProductProgress,
 } from '../types'
@@ -34,12 +35,15 @@ import {
   type DetectedRect,
 } from '../services/opencvService'
 import {
-  bandToCanvas,
-  preprocess,
+  grayscale,
   detectLinesAuto,
   detectLinesFixed,
   type Band,
 } from '../logic/vision'
+import {
+  preprocessRegion,
+  finishBandCanvas,
+} from '../logic/preprocessPipeline'
 import { matchExpectedLine, type MatchThresholds } from '../logic/match'
 import { normalizeText } from '../logic/normalize'
 
@@ -69,8 +73,9 @@ export interface UseVideoInspection {
   guideHpx: number
   setGuideWpx: (v: number) => void
   setGuideHpx: (v: number) => void
-  /** 検出枠pxの最小値（=100）と最大値（=映像枠の表示実寸px・動的） */
-  guideMinPx: number
+  /** 検出枠pxの最小値（幅=100 / 高さ=50）と最大値（=映像枠の表示実寸px・動的） */
+  guideMinWpx: number
+  guideMinHpx: number
   guideMaxWpx: number
   guideMaxHpx: number
   /** 検出枠pxの調整ステップ（=5） */
@@ -97,15 +102,17 @@ export interface UseVideoInspection {
 }
 
 // 検出枠は「表示px」で指定する（映像枠上で見えている実寸基準）。
-// 最小100px、ステップ5px、最大は映像枠の表示実寸（動的）に追従する。
-const GUIDE_MIN_PX = 100
+// ステップ5px、最大は映像枠の表示実寸（動的）に追従する。
+// 最小は 幅100px × 高さ50px（高さは幅の半分）。
+const GUIDE_MIN_W_PX = 100
+const GUIDE_MIN_H_PX = 50
 const GUIDE_STEP_PX = 5
 // 表示実寸が未測定のときの暫定上限（測定後に実寸へ置き換わる）
 const GUIDE_FALLBACK_MAX_PX = 4000
 /** px値を 5px 刻みに丸めて [min, max] にクランプ */
-const snapGuidePx = (v: number, max: number) => {
+const snapGuidePx = (v: number, min: number, max: number) => {
   const snapped = Math.round(v / GUIDE_STEP_PX) * GUIDE_STEP_PX
-  return Math.max(GUIDE_MIN_PX, Math.min(Math.max(GUIDE_MIN_PX, max), snapped))
+  return Math.max(min, Math.min(Math.max(min, max), snapped))
 }
 
 function clampRect(r: Rect, w: number, h: number): Rect {
@@ -132,6 +139,7 @@ export function useVideoInspection(
   target: InspectionTarget | null,
   ocrOptions: OcrOptions,
   thresholds: MatchThresholds,
+  preprocessSettings: PreprocessSettings,
 ): UseVideoInspection {
   const videoRef = useRef<HTMLVideoElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -161,6 +169,8 @@ export function useVideoInspection(
   const previewModeRef = useRef<PreviewMode>('normal')
   const ocrOptionsRef = useRef(ocrOptions)
   const thresholdsRef = useRef(thresholds)
+  // 前処理設定（フォームの最新値）。ループ内から参照し、変更がリアルタイムに反映される
+  const preprocessRef = useRef(preprocessSettings)
   const lastDetectTsRef = useRef(0)
   const lastRectRef = useRef<Rect | null>(null)
   const lastRegionRef = useRef<Rect | null>(null)
@@ -201,14 +211,17 @@ export function useVideoInspection(
   useEffect(() => {
     thresholdsRef.current = thresholds
   }, [thresholds])
+  useEffect(() => {
+    preprocessRef.current = preprocessSettings
+  }, [preprocessSettings])
 
   const setGuideWpx = (v: number) => {
-    const c = snapGuidePx(v, stageW || GUIDE_FALLBACK_MAX_PX)
+    const c = snapGuidePx(v, GUIDE_MIN_W_PX, stageW || GUIDE_FALLBACK_MAX_PX)
     guideRef.current = { ...guideRef.current, wpx: c }
     setGuideWpxState(c)
   }
   const setGuideHpx = (v: number) => {
-    const c = snapGuidePx(v, stageH || GUIDE_FALLBACK_MAX_PX)
+    const c = snapGuidePx(v, GUIDE_MIN_H_PX, stageH || GUIDE_FALLBACK_MAX_PX)
     guideRef.current = { ...guideRef.current, hpx: c }
     setGuideHpxState(c)
   }
@@ -231,8 +244,8 @@ export function useVideoInspection(
         wpx = cw * 0.8
         hpx = ch * 0.45
       }
-      wpx = snapGuidePx(wpx, cw)
-      hpx = snapGuidePx(hpx, ch)
+      wpx = snapGuidePx(wpx, GUIDE_MIN_W_PX, cw)
+      hpx = snapGuidePx(hpx, GUIDE_MIN_H_PX, ch)
       if (wpx !== cur.wpx || hpx !== cur.hpx) {
         guideRef.current = { wpx, hpx }
       }
@@ -384,7 +397,7 @@ export function useVideoInspection(
    * 前処理後映像（表示用）を映像枠に描画する。
    * - OCRには一切影響しない「確認・デバッグ用」の表示切替。
    * - **OCRが実際に処理している切り出し領域（region）と同じ範囲**を、
-   *   **OCRと同じ前処理関数 preprocess** で処理して表示する（表示＝OCR入力）。
+   *   **OCRと同じ前処理パイプライン preprocessRegion** で処理して表示する（表示＝OCR入力）。
    * - 領域外は描かず通常映像を透過させるため、OCRが食べている範囲が一目で分かる。
    * - 30FPSの表示ループから呼ぶが、内部で約10FPSに間引き（throttle）し、表示用は
    *   領域を縮小して処理する（表示の軽量化はここに限定。OCR入力には波及しない）。
@@ -443,8 +456,9 @@ export function useVideoInspection(
       )
       const img = sctx.getImageData(0, 0, sw, sh)
 
-      // OCRと同じ前処理（グレースケール＋軽い補正。二値化はしない）
-      const g = preprocess(img)
+      // OCRと同じ領域前処理パイプラインを適用（表示＝実際のOCR入力）。
+      // 表示は領域を縮小しているが、処理内容（preprocessRegion）はOCRと同一。
+      const g = preprocessRegion(img, preprocessRef.current, cvRef.current)
       if (!previewBinCanvasRef.current) {
         previewBinCanvasRef.current = document.createElement('canvas')
       }
@@ -580,25 +594,31 @@ export function useVideoInspection(
         fc.height,
       )
       // 切り出し領域は region（映像フレームの実ピクセル）そのままで取得しており、
-      // 表示用の縮小（480px化）は一切かけていない。OCR入力は元解像度を維持する。
+      // 範囲・座標・アスペクト比には一切手を入れない。OCR入力は元解像度を維持する。
       const img = fctx.getImageData(0, 0, fc.width, fc.height)
 
-      // 前処理（グレースケール＋軽い補正。二値化はしない）→ 行分割
-      const gray = preprocess(img)
+      // 行検出は「安定した中間画像（素のグレースケール）」で行い、前処理設定の
+      // ON/OFFに左右されないようにする（行検出を壊さない）。
+      const grayStable = grayscale(img)
       const bands =
         modeRef.current === 'auto'
-          ? detectLinesAuto(gray)
-          : detectLinesFixed(gray.height, fixedRowsRef.current)
+          ? detectLinesAuto(grayStable)
+          : detectLinesFixed(grayStable.height, fixedRowsRef.current)
       lastBandsRef.current = bands
       setDetectedLineCount(bands.length)
 
-      // 行ごとにOCR（永続ワーカー）。bandToCanvas は拡大のみで縮小しない
+      // 設定フォームの値で領域前処理を実適用（幾何は変えない。同寸の処理結果）
+      const settings = preprocessRef.current
+      const cv = cvRef.current
+      const processed = preprocessRegion(img, settings, cv)
+
+      // 行ごとにOCR（永続ワーカー）。各バンドへ deskew/crop_margin/resize を適用
       const opts = ocrOptionsRef.current
       const candidates: string[] = []
       const rawTexts: string[] = []
       for (const band of bands) {
         if (!runningRef.current) return
-        const canvas = bandToCanvas(gray, band)
+        const canvas = finishBandCanvas(processed, band, settings, cv)
         const res = await ocrServiceRef.current!.recognize(canvas, opts)
         const raw = res.text.replace(/\s+/g, ' ').trim()
         if (raw) rawTexts.push(raw)
@@ -772,7 +792,8 @@ export function useVideoInspection(
     guideHpx,
     setGuideWpx,
     setGuideHpx,
-    guideMinPx: GUIDE_MIN_PX,
+    guideMinWpx: GUIDE_MIN_W_PX,
+    guideMinHpx: GUIDE_MIN_H_PX,
     guideMaxWpx: stageW || GUIDE_FALLBACK_MAX_PX,
     guideMaxHpx: stageH || GUIDE_FALLBACK_MAX_PX,
     guideStepPx: GUIDE_STEP_PX,

@@ -133,12 +133,10 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
     <div className="pp-form">
       <div className="pp-form-head">
         <span className="pp-title">前処理設定</span>
-        <button type="button" className="btn-secondary sm" onClick={onReset}>
-          既定に戻す
-        </button>
       </div>
       <p className="muted pp-note">
-        ※ 現段階は値の保持・表示・編集のみ。実際の前処理への適用は次段階です。
+        ※ ここで変更した値は、OCRに渡る画像の前処理と「前処理後映像」表示の両方へ即時反映されます
+        （OCRの切り出し範囲・アスペクト比は変わりません）。
       </p>
 
       {/* ルート */}
@@ -419,6 +417,15 @@ export function PreprocessSettingsForm({ value, onChange, onReset }: Props) {
           onChange={(v) => setOp('resize', 'keep_ratio', v)}
         />
       </fieldset>
+
+      {/* 最下段：デフォルト値に戻す */}
+      <button
+        type="button"
+        className="btn-secondary pp-reset"
+        onClick={onReset}
+      >
+        デフォルト値に戻す
+      </button>
     </div>
   )
 }
